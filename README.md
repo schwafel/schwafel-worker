@@ -14,7 +14,7 @@ With `wrangler`, you can build, test, and deploy your Worker with the following 
 # compiles your project to WebAssembly and will warn of any issues
 wrangler build 
 
-# set cors secret
+# set cors secret to https://www.example.com,http://127.0.0.1:3000,http://localhost:3000
 
 wrangler secret put CORS_ORIGIN
 

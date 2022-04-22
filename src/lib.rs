@@ -103,7 +103,10 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let resp: GenerationResponse = GenerationResponse {
                 generated_text: generate(data.message).await,
             };
-            Response::from_json(&json!(resp))
+            let mut headers = worker::Headers::new();
+            headers.set("Access-Control-Allow-Origin", "*").unwrap();
+            let response = Response::from_json(&json!(resp)).unwrap();
+            Ok(response.with_headers(headers))
         })
         .get("/worker-version", |_, ctx| {
             let version = ctx.var("WORKERS_RS_VERSION")?.to_string();
