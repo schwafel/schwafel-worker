@@ -29,12 +29,30 @@ struct GPTJRequest {
     inputs: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct AnswerRequest {
+    question: String,
+    context: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RobertaRequest {
+    inputs: RobertaInput,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RobertaInput {
+    question: String,
+    context: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AnswerResponse {
+    answer: String,
+}
 
 async fn generate(message: String) -> String {
-
-    let body = GPTJRequest {
-        inputs: message
-    };
+    let body = GPTJRequest { inputs: message };
 
     let client = reqwest::Client::new();
     let res: Vec<GenerationResponse> = client
@@ -49,6 +67,26 @@ async fn generate(message: String) -> String {
         .unwrap();
 
     res[0].generated_text.to_string()
+}
+
+async fn answer(question: String, context: String) -> String {
+    let body = RobertaRequest {
+        inputs: RobertaInput { question, context },
+    };
+
+    let client = reqwest::Client::new();
+    let res: AnswerResponse = client
+        .post("https://api-inference.huggingface.co/models/deepset/roberta-base-squad2")
+        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<AnswerResponse>()
+        .await
+        .unwrap();
+
+    res.answer.to_string()
 }
 
 // source: https://github.com/rodneylab/hcaptcha-serverless-rust-worker/blob/main/src/lib.rs
@@ -94,6 +132,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .options("/generate", |req, ctx| {
             preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
         })
+        .options("/answer", |req, ctx| {
+            preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
+        })
         .post_async("/generate", |mut req, _ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
@@ -102,6 +143,20 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             }
             let resp: GenerationResponse = GenerationResponse {
                 generated_text: generate(data.message).await,
+            };
+            let mut headers = worker::Headers::new();
+            headers.set("Access-Control-Allow-Origin", "*").unwrap();
+            let response = Response::from_json(&json!(resp)).unwrap();
+            Ok(response.with_headers(headers))
+        })
+        .post_async("/answer", |mut req, _ctx| async move {
+            let data: AnswerRequest;
+            match req.json().await {
+                Ok(res) => data = res,
+                Err(_) => return Response::error("Bad request", 400),
+            }
+            let resp: AnswerResponse = AnswerResponse {
+                answer: answer(data.question, data.context).await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
