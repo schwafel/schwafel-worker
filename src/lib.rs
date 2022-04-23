@@ -25,23 +25,7 @@ struct GenerationResponse {
 }
 
 #[derive(Serialize, Deserialize)]
-struct GPTJRequest {
-    inputs: String,
-}
-
-#[derive(Serialize, Deserialize)]
 struct AnswerRequest {
-    question: String,
-    context: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct RobertaRequest {
-    inputs: RobertaInput,
-}
-
-#[derive(Serialize, Deserialize)]
-struct RobertaInput {
     question: String,
     context: String,
 }
@@ -52,6 +36,11 @@ struct AnswerResponse {
 }
 
 async fn generate(message: String) -> String {
+    #[derive(Serialize, Deserialize)]
+    struct GPTJRequest {
+        inputs: String,
+    }
+
     let body = GPTJRequest { inputs: message };
 
     let client = reqwest::Client::new();
@@ -70,6 +59,17 @@ async fn generate(message: String) -> String {
 }
 
 async fn answer(question: String, context: String) -> String {
+    #[derive(Serialize, Deserialize)]
+    struct RobertaRequest {
+        inputs: RobertaInput,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct RobertaInput {
+        question: String,
+        context: String,
+    }
+
     let body = RobertaRequest {
         inputs: RobertaInput { question, context },
     };
@@ -87,6 +87,28 @@ async fn answer(question: String, context: String) -> String {
         .unwrap();
 
     res.answer.to_string()
+}
+async fn headline(message: String) -> String {
+    #[derive(Serialize, Deserialize)]
+    struct GPTJRequest {
+        inputs: String,
+    }
+
+    let body = GPTJRequest { inputs: message };
+
+    let client = reqwest::Client::new();
+    let res: Vec<GenerationResponse> = client
+        .post("https://api-inference.huggingface.co/models/Michau/t5-base-en-generate-headline")
+        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<GenerationResponse>>()
+        .await
+        .unwrap();
+
+    res[0].generated_text.to_string()
 }
 
 // source: https://github.com/rodneylab/hcaptcha-serverless-rust-worker/blob/main/src/lib.rs
@@ -135,6 +157,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .options("/answer", |req, ctx| {
             preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
         })
+        .options("/headline", |req, ctx| {
+            preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
+        })
         .post_async("/generate", |mut req, _ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
@@ -157,6 +182,20 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             }
             let resp: AnswerResponse = AnswerResponse {
                 answer: answer(data.question, data.context).await,
+            };
+            let mut headers = worker::Headers::new();
+            headers.set("Access-Control-Allow-Origin", "*").unwrap();
+            let response = Response::from_json(&json!(resp)).unwrap();
+            Ok(response.with_headers(headers))
+        })
+        .post_async("/headline", |mut req, _ctx| async move {
+            let data: GenerationRequest;
+            match req.json().await {
+                Ok(res) => data = res,
+                Err(_) => return Response::error("Bad request", 400),
+            }
+            let resp: GenerationResponse = GenerationResponse {
+                generated_text: headline(data.message).await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
