@@ -35,6 +35,11 @@ struct AnswerResponse {
     answer: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SummarizeResponse {
+    summary_text: String,
+}
+
 async fn generate(message: String) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
@@ -110,6 +115,28 @@ async fn headline(message: String) -> String {
 
     res[0].generated_text.to_string()
 }
+async fn summarize(message: String) -> String {
+    #[derive(Serialize, Deserialize)]
+    struct GPTJRequest {
+        inputs: String,
+    }
+
+    let body = GPTJRequest { inputs: message };
+
+    let client = reqwest::Client::new();
+    let res: Vec<SummarizeResponse> = client
+        .post("https://api-inference.huggingface.co/models/facebook/bart-large-cnn")
+        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<SummarizeResponse>>()
+        .await
+        .unwrap();
+
+    res[0].summary_text.to_string()
+}
 
 // source: https://github.com/rodneylab/hcaptcha-serverless-rust-worker/blob/main/src/lib.rs
 fn preflight_response(headers: &worker::Headers, cors_origin: &str) -> Result<Response> {
@@ -160,6 +187,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .options("/headline", |req, ctx| {
             preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
         })
+        .options("/summarize", |req, ctx| {
+            preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
+        })
         .post_async("/generate", |mut req, _ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
@@ -196,6 +226,20 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             }
             let resp: GenerationResponse = GenerationResponse {
                 generated_text: headline(data.message).await,
+            };
+            let mut headers = worker::Headers::new();
+            headers.set("Access-Control-Allow-Origin", "*").unwrap();
+            let response = Response::from_json(&json!(resp)).unwrap();
+            Ok(response.with_headers(headers))
+        })
+        .post_async("/summarize", |mut req, _ctx| async move {
+            let data: GenerationRequest;
+            match req.json().await {
+                Ok(res) => data = res,
+                Err(_) => return Response::error("Bad request", 400),
+            }
+            let resp: SummarizeResponse = SummarizeResponse {
+                summary_text: summarize(data.message).await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
