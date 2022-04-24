@@ -40,7 +40,7 @@ struct SummarizeResponse {
     summary_text: String,
 }
 
-async fn generate(message: String) -> String {
+async fn generate(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
@@ -48,10 +48,14 @@ async fn generate(message: String) -> String {
 
     let body = GPTJRequest { inputs: message };
 
+    let authorization = match api_token {
+        Some(token) => format!("Bearer {}", token),
+        _ => "Bearer {API_TOKEN}".to_owned(),
+    };
     let client = reqwest::Client::new();
     let res: Vec<GenerationResponse> = client
         .post("https://api-inference.huggingface.co/models/EleutherAI/gpt-j-6B")
-        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .header("Authorization", authorization)
         .json(&body)
         .send()
         .await
@@ -63,7 +67,7 @@ async fn generate(message: String) -> String {
     res[0].generated_text.to_string()
 }
 
-async fn answer(question: String, context: String) -> String {
+async fn answer(question: String, context: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct RobertaRequest {
         inputs: RobertaInput,
@@ -78,11 +82,14 @@ async fn answer(question: String, context: String) -> String {
     let body = RobertaRequest {
         inputs: RobertaInput { question, context },
     };
-
+    let authorization = match api_token {
+        Some(token) => format!("Bearer {}", token),
+        _ => "Bearer {API_TOKEN}".to_owned(),
+    };
     let client = reqwest::Client::new();
     let res: AnswerResponse = client
         .post("https://api-inference.huggingface.co/models/deepset/roberta-base-squad2")
-        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .header("Authorization", authorization)
         .json(&body)
         .send()
         .await
@@ -93,18 +100,21 @@ async fn answer(question: String, context: String) -> String {
 
     res.answer.to_string()
 }
-async fn headline(message: String) -> String {
+async fn headline(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
     }
 
     let body = GPTJRequest { inputs: message };
-
+    let authorization = match api_token {
+        Some(token) => format!("Bearer {}", token),
+        _ => "Bearer {API_TOKEN}".to_owned(),
+    };
     let client = reqwest::Client::new();
     let res: Vec<GenerationResponse> = client
         .post("https://api-inference.huggingface.co/models/Michau/t5-base-en-generate-headline")
-        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .header("Authorization", authorization)
         .json(&body)
         .send()
         .await
@@ -115,18 +125,21 @@ async fn headline(message: String) -> String {
 
     res[0].generated_text.to_string()
 }
-async fn summarize(message: String) -> String {
+async fn summarize(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
     }
 
     let body = GPTJRequest { inputs: message };
-
+    let authorization = match api_token {
+        Some(token) => format!("Bearer {}", token),
+        _ => "Bearer {API_TOKEN}".to_owned(),
+    };
     let client = reqwest::Client::new();
     let res: Vec<SummarizeResponse> = client
         .post("https://api-inference.huggingface.co/models/facebook/bart-large-cnn")
-        .header("Authorization", "Bearer {API_TOKEN}".to_owned())
+        .header("Authorization", authorization)
         .json(&body)
         .send()
         .await
@@ -190,56 +203,64 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .options("/summarize", |req, ctx| {
             preflight_response(req.headers(), &ctx.var("CORS_ORIGIN")?.to_string())
         })
-        .post_async("/generate", |mut req, _ctx| async move {
+        .post_async("/generate", |mut req, ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
                 Ok(res) => data = res,
                 Err(_) => return Response::error("Bad request", 400),
             }
             let resp: GenerationResponse = GenerationResponse {
-                generated_text: generate(data.message).await,
+                generated_text: generate(data.message, Some(ctx.secret("HF_TOKEN")?.to_string()))
+                    .await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
             let response = Response::from_json(&json!(resp)).unwrap();
             Ok(response.with_headers(headers))
         })
-        .post_async("/answer", |mut req, _ctx| async move {
+        .post_async("/answer", |mut req, ctx| async move {
             let data: AnswerRequest;
             match req.json().await {
                 Ok(res) => data = res,
                 Err(_) => return Response::error("Bad request", 400),
             }
             let resp: AnswerResponse = AnswerResponse {
-                answer: answer(data.question, data.context).await,
+                answer: answer(
+                    data.question,
+                    data.context,
+                    Some(ctx.secret("HF_TOKEN")?.to_string()),
+                )
+                .await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
             let response = Response::from_json(&json!(resp)).unwrap();
             Ok(response.with_headers(headers))
         })
-        .post_async("/headline", |mut req, _ctx| async move {
+        .post_async("/headline", |mut req, ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
                 Ok(res) => data = res,
                 Err(_) => return Response::error("Bad request", 400),
             }
             let resp: GenerationResponse = GenerationResponse {
-                generated_text: headline(data.message).await,
+                generated_text: headline(data.message, Some(ctx.secret("HF_TOKEN")?.to_string()))
+                    .await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
             let response = Response::from_json(&json!(resp)).unwrap();
             Ok(response.with_headers(headers))
         })
-        .post_async("/summarize", |mut req, _ctx| async move {
+        .post_async("/summarize", |mut req, ctx| async move {
             let data: GenerationRequest;
             match req.json().await {
                 Ok(res) => data = res,
                 Err(_) => return Response::error("Bad request", 400),
             }
             let resp: SummarizeResponse = SummarizeResponse {
-                summary_text: summarize(data.message).await,
+                summary_text: summarize(data.message, Some(ctx.secret("HF_TOKEN")?.to_string()))
+                    .await,
             };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
