@@ -15,32 +15,32 @@ fn log_request(req: &Request) {
 }
 
 #[derive(Serialize, Deserialize)]
-struct GenerationRequest {
+pub struct GenerationRequest {
     message: String,
 }
 
 #[derive(Serialize, Deserialize)]
-struct GenerationResponse {
+pub struct GenerationResponse {
     generated_text: String,
 }
 
 #[derive(Serialize, Deserialize)]
-struct AnswerRequest {
+pub struct AnswerRequest {
     question: String,
     context: String,
 }
 
 #[derive(Serialize, Deserialize)]
-struct AnswerResponse {
+pub struct AnswerResponse {
     answer: String,
 }
 
 #[derive(Serialize, Deserialize)]
-struct SummarizeResponse {
+pub struct SummarizeResponse {
     summary_text: String,
 }
 
-async fn generate(message: String, api_token: Option<String>) -> String {
+pub async fn generate(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
@@ -67,7 +67,7 @@ async fn generate(message: String, api_token: Option<String>) -> String {
     res[0].generated_text.to_string()
 }
 
-async fn answer(question: String, context: String, api_token: Option<String>) -> String {
+pub async fn answer(question: String, context: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct RobertaRequest {
         inputs: RobertaInput,
@@ -100,7 +100,7 @@ async fn answer(question: String, context: String, api_token: Option<String>) ->
 
     res.answer.to_string()
 }
-async fn headline(message: String, api_token: Option<String>) -> String {
+pub async fn headline(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
@@ -125,7 +125,7 @@ async fn headline(message: String, api_token: Option<String>) -> String {
 
     res[0].generated_text.to_string()
 }
-async fn summarize(message: String, api_token: Option<String>) -> String {
+pub async fn summarize(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
         inputs: String,
