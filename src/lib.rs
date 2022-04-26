@@ -40,6 +40,45 @@ pub struct SummarizeResponse {
     summary_text: String,
 }
 
+pub async fn complete(message: String, api_token: Option<String>) -> String {
+    #[derive(Serialize, Deserialize)]
+    struct GPT3Request {
+        prompt: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct ResponseChoice {
+        text: String,
+        index: u32,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct GPT3Response {
+        id: String,
+        choices: Vec<ResponseChoice>,
+    }
+
+    let body = GPT3Request { prompt: message };
+
+    let authorization = match api_token {
+        Some(token) => format!("Bearer {}", token),
+        _ => "Bearer {API_TOKEN}".to_owned(),
+    };
+    let client = reqwest::Client::new();
+    let res: GPT3Response = client
+        .post("https://api.openai.com/v1/engines/text-ada-001/completions")
+        .header("Authorization", authorization)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<GPT3Response>()
+        .await
+        .unwrap();
+
+    res.choices[0].text.to_string()
+}
+
 pub async fn generate(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPTJRequest {
@@ -209,10 +248,11 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                 Ok(res) => data = res,
                 Err(_) => return Response::error("Bad request", 400),
             }
-            let resp: GenerationResponse = GenerationResponse {
-                generated_text: generate(data.message, Some(ctx.secret("HF_TOKEN")?.to_string()))
-                    .await,
-            };
+            //let generated_text = generate(data.message, Some(ctx.secret("HF_TOKEN")?.to_string())).await;
+
+            let generated_text =
+                complete(data.message, Some(ctx.secret("OPENAI_TOKEN")?.to_string())).await;
+            let resp: GenerationResponse = GenerationResponse { generated_text };
             let mut headers = worker::Headers::new();
             headers.set("Access-Control-Allow-Origin", "*").unwrap();
             let response = Response::from_json(&json!(resp)).unwrap();

@@ -18,10 +18,14 @@ wrangler build
 
 wrangler secret put CORS_ORIGIN
 
+# put api keys
+
+wrangler secret put HF_TOKEN
+wrangler secret put OPENAI_TOKEN
+
 # run your Worker in an ideal development workflow (with a local server, file watcher & more)
 wrangler dev
 
 # deploy your Worker globally to the Cloudflare network (update your wrangler.toml file for configuration)
 wrangler publish
 ```
-
