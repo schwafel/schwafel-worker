@@ -44,6 +44,7 @@ pub async fn complete(message: String, api_token: Option<String>) -> String {
     #[derive(Serialize, Deserialize)]
     struct GPT3Request {
         prompt: String,
+        max_tokens: u32
     }
 
     #[derive(Serialize, Deserialize)]
@@ -58,7 +59,7 @@ pub async fn complete(message: String, api_token: Option<String>) -> String {
         choices: Vec<ResponseChoice>,
     }
 
-    let body = GPT3Request { prompt: message };
+    let body = GPT3Request { prompt: message, max_tokens: 100 };
 
     let authorization = match api_token {
         Some(token) => format!("Bearer {}", token),
@@ -66,7 +67,7 @@ pub async fn complete(message: String, api_token: Option<String>) -> String {
     };
     let client = reqwest::Client::new();
     let res: GPT3Response = client
-        .post("https://api.openai.com/v1/engines/text-ada-001/completions")
+        .post("https://api.openai.com/v1/engines/text-davinci-002/completions")
         .header("Authorization", authorization)
         .json(&body)
         .send()
